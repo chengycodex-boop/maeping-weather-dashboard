@@ -1,0 +1,8 @@
+{
+  "status": "provisional_research_thresholds",
+  "rain_hourly_mm": {"watch": 20, "warning": 35, "critical": 50},
+  "rain_observed_24h_mm": {"watch": 50, "warning": 100, "critical": 150},
+  "temperature_c": {"watch": 38, "warning": 40, "critical": 43},
+  "minimum_forecast_probability_percent": 50,
+  "note_th": "ใช้เป็นสัญญาณคัดกรองเพื่อเฝ้าระวังเท่านั้น ไม่ใช่เกณฑ์ประกาศภัยอย่างเป็นทางการ"
+}
