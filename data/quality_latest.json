@@ -1,0 +1,108 @@
+{
+  "checked_at": "2026-08-23T08:58:22+00:00",
+  "status": "warning",
+  "thresholds": {
+    "fresh_warning_hours": 6,
+    "fresh_critical_hours": 24,
+    "rain_daily_minimum_of_30": 24
+  },
+  "counts": {
+    "critical": 0,
+    "warning": 1,
+    "suspect_observations": 0,
+    "duplicate_observation_keys": 0,
+    "foreign_key_issues": 0,
+    "unexpected_priority2_temperature_rows": 0
+  },
+  "station_profile": [
+    {
+      "location_id": "THAIWATER_3665",
+      "code": "48377",
+      "expected_variables": [
+        "temperature"
+      ],
+      "temperature_latest": "2026-08-23T13:00:00+07:00",
+      "temperature_age_hours": 2.97,
+      "rain_daily_rows_30d": 28
+    },
+    {
+      "location_id": "THAIWATER_11567344",
+      "code": "DNP088",
+      "expected_variables": [
+        "precipitation",
+        "temperature"
+      ],
+      "precipitation_latest": "2026-08-23T15:00:00+07:00",
+      "precipitation_age_hours": 0.97,
+      "temperature_latest": "2026-08-23T15:00:00+07:00",
+      "temperature_age_hours": 0.97,
+      "rain_daily_rows_30d": 30
+    },
+    {
+      "location_id": "THAIWATER_11567345",
+      "code": "DNP089",
+      "expected_variables": [
+        "precipitation",
+        "temperature"
+      ],
+      "precipitation_latest": "2026-08-23T15:00:00+07:00",
+      "precipitation_age_hours": 0.97,
+      "temperature_latest": "2026-08-23T15:00:00+07:00",
+      "temperature_age_hours": 0.97,
+      "rain_daily_rows_30d": 30
+    },
+    {
+      "location_id": "THAIWATER_1198301",
+      "code": "PIN011",
+      "expected_variables": [
+        "precipitation",
+        "temperature"
+      ],
+      "precipitation_latest": "2026-08-23T15:00:00+07:00",
+      "precipitation_age_hours": 0.97,
+      "temperature_latest": "2026-08-23T15:00:00+07:00",
+      "temperature_age_hours": 0.97,
+      "rain_daily_rows_30d": 29
+    },
+    {
+      "location_id": "THAIWATER_1307",
+      "code": "STN0370",
+      "expected_variables": [
+        "precipitation"
+      ],
+      "precipitation_latest": "2026-08-23T14:00:00+07:00",
+      "precipitation_age_hours": 1.97,
+      "rain_daily_rows_30d": 29
+    },
+    {
+      "location_id": "THAIWATER_501199",
+      "code": "STN1161",
+      "expected_variables": [
+        "precipitation"
+      ],
+      "precipitation_latest": "2026-08-23T14:00:00+07:00",
+      "precipitation_age_hours": 1.97,
+      "rain_daily_rows_30d": 28
+    },
+    {
+      "location_id": "THAIWATER_500150",
+      "code": "STN1540",
+      "expected_variables": [
+        "precipitation"
+      ],
+      "precipitation_latest": "2026-08-23T14:00:00+07:00",
+      "precipitation_age_hours": 1.97,
+      "rain_daily_rows_30d": 29
+    }
+  ],
+  "findings": [
+    {
+      "severity": "warning",
+      "check": "tmd_qpe_freshness",
+      "entity": "TMD Radar composite QPE",
+      "variable": "precipitation",
+      "evidence": "product_time=2026-07-11T20:00:00+00:00 age_hours=1020.97",
+      "impact": "ไม่มี radar spatial ground truth สด; ระบบใช้ gauge และ forecast โดยไม่แสดง QPE เก่า"
+    }
+  ]
+}

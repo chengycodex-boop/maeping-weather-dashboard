@@ -1,0 +1,30 @@
+{
+  "park_id": "mae_ping_national_park",
+  "name_th": "อุทยานแห่งชาติแม่ปิง",
+  "source": "OpenStreetMap relation 6004000",
+  "source_url": "https://www.openstreetmap.org/relation/6004000",
+  "captured_at": "2026-08-23",
+  "geometry_status": "provisional_secondary_boundary",
+  "centroid": {
+    "latitude": 17.5941776,
+    "longitude": 98.7270995
+  },
+  "bounding_box": {
+    "south": 17.2568034,
+    "north": 17.9316498,
+    "west": 98.6109030,
+    "east": 98.9947445
+  },
+  "osm_license": "ODbL 1.0",
+  "use": "ใช้ค้นข้อมูลและทำแผนที่พัฒนาระยะแรกเท่านั้น",
+  "replacement_required": "ต้องแทนด้วยแนวเขตทางการของ DNP หรือแนวเขตจากราชกิจจานุเบกษาที่แปลงเป็น GIS ก่อนใช้เชิงปฏิบัติการ",
+  "cross_check": {
+    "source": "GISTDA/MNRE L10_NPRK_MNRE_50k",
+    "source_year_be": 2557,
+    "osm_area_km2_approx": 1009.62,
+    "government_area_km2_approx": 1023.24,
+    "area_difference_percent_vs_government": -1.33,
+    "osm_grid_centroids_inside_government": "39/40",
+    "decision": "retain_osm_provisional_pending_current_dnp_geometry"
+  }
+}

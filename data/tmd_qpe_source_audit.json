@@ -1,0 +1,24 @@
+{
+  "checked_at": "2026-08-23T08:58:20+00:00",
+  "source": "TMD Radar composite QPE ASCII",
+  "url": "https://weather.tmd.go.th/composite/compositeQPE_VTBB_latest.asc.zip",
+  "filename": "Z__C_VTBB_20260711200000_SRF_GPV_Gll0p01deg_Prr60lv_ANAL.asc",
+  "product_time": "2026-07-11T20:00:00+00:00",
+  "time_assumption": "UTC inferred from TMD radar page convention",
+  "age_hours": 1020.97,
+  "max_age_hours": 6.0,
+  "status": "stale",
+  "ingestion_decision": "skip_stale_product",
+  "ingested_grid_cells": 0,
+  "available_grid_cells": 0,
+  "product": "60-minute radar composite quantitative precipitation estimate",
+  "unit": "mm",
+  "grid": {
+    "ncols": 1300,
+    "nrows": 1850,
+    "cellsize_degrees": 0.01,
+    "west": 95.005,
+    "south": 3.995,
+    "nodata_value": -9999.0
+  }
+}

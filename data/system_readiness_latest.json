@@ -1,0 +1,172 @@
+{
+  "computed_at": "2026-08-23T08:58:22+00:00",
+  "completion": {
+    "technical_percent": 93.5,
+    "evidence_percent": 32.5,
+    "operational_readiness_percent": 69.1,
+    "method": "60% technical implementation + 40% evidence maturity"
+  },
+  "technical_components": [
+    {
+      "component": "data_model",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "ground_observations",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "point_forecast_history",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "grid_forecast",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "dashboard",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "automation",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "quality_gates",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "radar_qpe_connector",
+      "weight": 10,
+      "score": 100
+    },
+    {
+      "component": "satellite_connector",
+      "weight": 5,
+      "score": 20
+    },
+    {
+      "component": "official_boundary",
+      "weight": 5,
+      "score": 50
+    },
+    {
+      "component": "accuracy_engine",
+      "weight": 5,
+      "score": 100
+    },
+    {
+      "component": "bias_correction_pipeline",
+      "weight": 5,
+      "score": 100
+    }
+  ],
+  "evidence_components": [
+    {
+      "component": "operational_station_coverage",
+      "weight": 20,
+      "score": 100.0
+    },
+    {
+      "component": "forecast_observation_history",
+      "weight": 30,
+      "score": 0.0
+    },
+    {
+      "component": "ready_verification_groups",
+      "weight": 20,
+      "score": 0.0
+    },
+    {
+      "component": "fresh_spatial_ground_truth",
+      "weight": 15,
+      "score": 0
+    },
+    {
+      "component": "boundary_authority",
+      "weight": 5,
+      "score": 50
+    },
+    {
+      "component": "forecast_spatial_coverage",
+      "weight": 10,
+      "score": 100
+    }
+  ],
+  "metrics": {
+    "forecast_max_hourly_rain_next_24h_mm": 0.5,
+    "forecast_max_temperature_next_24h_c": 32.0,
+    "forecast_max_rain_probability_next_24h_percent": 92.0,
+    "observed_max_station_rain_24h_mm": 0.5,
+    "observed_max_temperature_c": 31.4
+  },
+  "signals": [
+    {
+      "metric": "forecast_max_hourly_rain_next_24h_mm",
+      "value": 0.5,
+      "level": "normal"
+    },
+    {
+      "metric": "observed_max_station_rain_24h_mm",
+      "value": 0.5,
+      "level": "normal"
+    },
+    {
+      "metric": "forecast_max_temperature_next_24h_c",
+      "value": 32.0,
+      "level": "normal"
+    },
+    {
+      "metric": "tmd_qpe_freshness",
+      "value": 1020.97,
+      "level": "data_gap"
+    },
+    {
+      "metric": "accuracy_evidence",
+      "value": 0,
+      "level": "accumulating"
+    }
+  ],
+  "thresholds": {
+    "status": "provisional_research_thresholds",
+    "rain_hourly_mm": {
+      "watch": 20,
+      "warning": 35,
+      "critical": 50
+    },
+    "rain_observed_24h_mm": {
+      "watch": 50,
+      "warning": 100,
+      "critical": 150
+    },
+    "temperature_c": {
+      "watch": 38,
+      "warning": 40,
+      "critical": 43
+    },
+    "minimum_forecast_probability_percent": 50,
+    "note_th": "ใช้เป็นสัญญาณคัดกรองเพื่อเฝ้าระวังเท่านั้น ไม่ใช่เกณฑ์ประกาศภัยอย่างเป็นทางการ"
+  },
+  "counts": {
+    "observations": 1027,
+    "forecast_history": 103122,
+    "grid_cells": 40,
+    "grid_forecasts_latest": 18240,
+    "grid_estimates_latest": 0,
+    "verification_groups": 70,
+    "ready_verification_groups": 0,
+    "max_sample_days": 0
+  },
+  "remaining_external_dependencies": [
+    "current official DNP boundary geometry",
+    "fresh TMD QPE product or alternative numerical satellite feed",
+    "60–90 days of real forecast-observation pairs"
+  ]
+}
