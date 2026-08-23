@@ -1,0 +1,5 @@
+*.db
+__pycache__/
+*.pyc
+runtime/
+data/operational_status.json
