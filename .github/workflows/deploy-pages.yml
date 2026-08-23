@@ -1,9 +1,11 @@
-name: Deploy dashboard to GitHub Pages
+name: Refresh data and deploy dashboard
 
 on:
   push:
     branches:
       - main
+  schedule:
+    - cron: "17 */3 * * *"
   workflow_dispatch:
 
 permissions:
@@ -12,18 +14,54 @@ permissions:
   id-token: write
 
 concurrency:
-  group: github-pages
+  group: maeping-operational-refresh
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  refresh-and-deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SUPABASE_URL: https://qmfezkfzflanpckeyhtc.supabase.co
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Check server-side configuration
+        run: |
+          if [[ -z "$SUPABASE_SECRET_KEY" ]]; then
+            echo "SUPABASE_SECRET_KEY is not configured"
+            exit 1
+          fi
+
+      - name: Initialize local cache
+        run: python src/init_db.py data/maeping_weather.db
+
+      - name: Restore history from Supabase
+        run: python src/sync_supabase.py pull data/maeping_weather.db
+
+      - name: Refresh observations, forecasts, estimates, and dashboard
+        id: operational-cycle
+        continue-on-error: true
+        run: python src/run_operational_cycle.py
+
+      - name: Validate release artifact
+        run: python src/validate_release.py data/maeping_weather.db dashboard/index.html
+
+      - name: Persist history and latest estimates to Supabase
+        run: python src/sync_supabase.py push data/maeping_weather.db
+
+      - name: Run automated tests
+        run: python -m unittest discover -s tests -v
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
