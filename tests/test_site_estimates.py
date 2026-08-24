@@ -1,8 +1,9 @@
 import tempfile
 import unittest
+from datetime import datetime, timedelta
 from pathlib import Path
 
-from src.build_site_estimates import build_estimates
+from src.build_site_estimates import build_estimates, build_rainfall_24h
 from src.init_db import build_database
 
 
@@ -43,16 +44,19 @@ class SiteEstimateTests(unittest.TestCase):
                         (forecast_id, issued, location_id, variable, issued, valid, value, unit, issued),
                     )
             for station_id in ("THAIWATER_11567345", "THAIWATER_1198301"):
-                connection.execute(
-                """
-                INSERT INTO observations (
-                    observation_id, source_id, location_id, variable, observed_at,
-                    period_minutes, value, unit, quality_flag, spatial_support, ingested_at
-                ) VALUES (?, 'thaiwater_data_service', ?, 'precipitation', ?, 60, 1.0,
-                          'mm', 'provisional', 'point', ?)
-                """,
-                    (f"{station_id}-rain", station_id, valid, issued),
-                )
+                rainfall_end = datetime.fromisoformat(valid)
+                for offset in range(24):
+                    observed_at = (rainfall_end - timedelta(hours=offset)).isoformat()
+                    connection.execute(
+                    """
+                    INSERT INTO observations (
+                        observation_id, source_id, location_id, variable, observed_at,
+                        period_minutes, value, unit, quality_flag, spatial_support, ingested_at
+                    ) VALUES (?, 'thaiwater_data_service', ?, 'precipitation', ?, 60, 1.0,
+                              'mm', 'provisional', 'point', ?)
+                    """,
+                        (f"{station_id}-rain-{offset}", station_id, observed_at, issued),
+                    )
                 connection.execute(
                 """
                 INSERT INTO observations (
@@ -68,12 +72,22 @@ class SiteEstimateTests(unittest.TestCase):
             connection.close()
 
         rows = build_estimates(database)
+        rainfall_24h = build_rainfall_24h(database)
         self.assertEqual(len(rows), 26)
         self.assertEqual(len({row["location_id"] for row in rows}), 13)
-        unknown = [row for row in rows if row["location_id"] in {"MP08", "MP12"}]
-        self.assertTrue(all(row["estimate_type"] == "regional_fallback" for row in unknown))
-        self.assertTrue(all(row["confidence_level"] == "low" for row in unknown))
+        approximate = [row for row in rows if row["location_id"] in {"MP08", "MP12"}]
+        self.assertTrue(all(row["estimate_type"] != "regional_fallback" for row in approximate))
+        self.assertTrue(all(row["spatial_basis"] == "area_anchor" for row in approximate))
+        self.assertTrue(all(row["confidence_level"] == "low" for row in approximate))
         self.assertTrue(all(row["historical_error_percent"] is None for row in rows))
+        self.assertEqual(len(rainfall_24h), 13)
+        self.assertTrue(all(row["period_minutes"] == 1440 for row in rainfall_24h))
+        self.assertTrue(all(row["coverage_hours"] == 24 for row in rainfall_24h))
+        self.assertTrue(all(row["value"] == 24.0 for row in rainfall_24h))
+        approximate_24h = [
+            row for row in rainfall_24h if row["location_id"] in {"MP08", "MP12"}
+        ]
+        self.assertTrue(all(row["confidence_level"] == "low" for row in approximate_24h))
 
 
 if __name__ == "__main__":

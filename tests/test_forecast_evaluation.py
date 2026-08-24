@@ -22,7 +22,7 @@ class ForecastEvaluationTests(unittest.TestCase):
 
     def test_forecast_targets_reporting_and_operational_sensor_locations(self):
         locations = load_located_stations()
-        self.assertEqual(sum(row["location_group"] == "reporting_site" for row in locations), 11)
+        self.assertEqual(sum(row["location_group"] == "reporting_site" for row in locations), 13)
         self.assertEqual(sum(row["location_group"] == "support_sensor" for row in locations), 7)
 
     def test_verification_variables_follow_observation_grain(self):
