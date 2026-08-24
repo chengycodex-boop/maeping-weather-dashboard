@@ -27,6 +27,9 @@ def validate(database: Path, dashboard: Path) -> dict[str, int]:
         variables = connection.execute(
             "SELECT COUNT(DISTINCT variable) FROM site_estimates_latest"
         ).fetchone()[0]
+        rainfall_24h_rows = connection.execute(
+            "SELECT COUNT(*) FROM site_rainfall_24h_latest"
+        ).fetchone()[0]
     finally:
         connection.close()
     html = dashboard.read_text(encoding="utf-8")
@@ -34,17 +37,21 @@ def validate(database: Path, dashboard: Path) -> dict[str, int]:
         "reporting_sites": reporting_sites,
         "estimate_rows": estimate_rows,
         "variables": variables,
+        "rainfall_24h_rows": rainfall_24h_rows,
         "dashboard_bytes": dashboard.stat().st_size,
     }
     if reporting_sites != 13:
         raise RuntimeError(f"expected 13 reporting sites, found {reporting_sites}")
     if estimate_rows != reporting_sites * 2 or variables != 2:
         raise RuntimeError(f"incomplete estimates: {checks}")
+    if rainfall_24h_rows != reporting_sites:
+        raise RuntimeError(f"incomplete 24-hour rainfall estimates: {checks}")
     required_text = (
         "ข้อมูลล่าสุด",
         "สร้างหน้าเว็บ",
         "รอบถัดไปภายใน",
         "ฝนและอุณหภูมิรายพื้นที่",
+        "ฝนสูงสุด 24 ชั่วโมง",
     )
     missing = [text for text in required_text if text not in html]
     if missing or dashboard.stat().st_size < 100_000:

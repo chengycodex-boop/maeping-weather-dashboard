@@ -49,6 +49,7 @@ PRIMARY_KEYS: dict[str, tuple[str, ...]] = {
         "lead_bucket",
     ),
     "site_estimates_latest": ("location_id", "variable"),
+    "site_rainfall_24h_latest": ("location_id",),
     "operational_runs": ("run_id",),
 }
 
@@ -63,6 +64,7 @@ PUSH_TABLES = (
     "verification_results",
     "calibration_models_latest",
     "site_estimates_latest",
+    "site_rainfall_24h_latest",
 )
 
 

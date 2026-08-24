@@ -172,6 +172,25 @@ def dashboard_data(database: Path) -> dict:
                     """
                 )
             ]
+        rainfall_24h = []
+        if connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='site_rainfall_24h_latest'"
+        ).fetchone():
+            rainfall_24h = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT location_id, window_start, window_end, period_minutes,
+                           value, unit, estimate_type, spatial_basis,
+                           source_count, source_summary, coverage_hours,
+                           coverage_ratio, nearest_station_km, confidence_score,
+                           confidence_level, uncertainty_low, uncertainty_high,
+                           validation_status, method_version, updated_at
+                    FROM site_rainfall_24h_latest
+                    ORDER BY location_id
+                    """
+                )
+            ]
         issues = {
             row["severity"]: row["count"]
             for row in connection.execute(
@@ -232,6 +251,7 @@ def dashboard_data(database: Path) -> dict:
         "grid_forecasts": grid_forecasts,
         "grid_estimates": grid_estimates,
         "site_estimates": site_estimates,
+        "rainfall_24h": rainfall_24h,
         "issues": issues,
         "verification": verification,
         "operational_status": operational_status,
