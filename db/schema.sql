@@ -161,6 +161,35 @@ CREATE TABLE IF NOT EXISTS site_estimates_latest (
     PRIMARY KEY (location_id, variable)
 );
 
+CREATE TABLE IF NOT EXISTS site_rainfall_24h_latest (
+    location_id TEXT PRIMARY KEY REFERENCES locations(location_id),
+    window_start TEXT NOT NULL,
+    window_end TEXT NOT NULL,
+    period_minutes INTEGER NOT NULL CHECK (period_minutes = 1440),
+    value REAL NOT NULL CHECK (value >= 0),
+    unit TEXT NOT NULL CHECK (unit = 'mm'),
+    estimate_type TEXT NOT NULL CHECK (
+        estimate_type IN ('sensor', 'spatial_interpolation', 'regional_fallback')
+    ),
+    spatial_basis TEXT NOT NULL CHECK (
+        spatial_basis IN ('exact_point', 'area_anchor', 'park_regional')
+    ),
+    source_count INTEGER NOT NULL CHECK (source_count >= 1),
+    source_summary TEXT NOT NULL,
+    coverage_hours REAL NOT NULL CHECK (coverage_hours BETWEEN 0 AND 24),
+    coverage_ratio REAL NOT NULL CHECK (coverage_ratio BETWEEN 0 AND 1),
+    nearest_station_km REAL,
+    confidence_score REAL NOT NULL CHECK (confidence_score BETWEEN 0 AND 100),
+    confidence_level TEXT NOT NULL CHECK (confidence_level IN ('high', 'medium', 'low')),
+    uncertainty_low REAL NOT NULL CHECK (uncertainty_low >= 0),
+    uncertainty_high REAL NOT NULL CHECK (uncertainty_high >= uncertainty_low),
+    validation_status TEXT NOT NULL CHECK (
+        validation_status IN ('awaiting_validation', 'provisional', 'validated')
+    ),
+    method_version TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS data_quality_issues (
     issue_id INTEGER PRIMARY KEY AUTOINCREMENT,
     entity_type TEXT NOT NULL,
@@ -238,6 +267,9 @@ CREATE INDEX IF NOT EXISTS idx_grid_estimates_latest_time
 
 CREATE INDEX IF NOT EXISTS idx_site_estimates_latest_time
     ON site_estimates_latest (variable, estimate_at);
+
+CREATE INDEX IF NOT EXISTS idx_site_rainfall_24h_latest_time
+    ON site_rainfall_24h_latest (window_end);
 
 CREATE INDEX IF NOT EXISTS idx_verification_results_lookup
     ON verification_results (location_id, variable, lead_bucket, computed_at);
