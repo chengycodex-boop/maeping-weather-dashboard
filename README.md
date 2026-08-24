@@ -22,6 +22,7 @@
 
 - `data/stations.csv` — Master 13 จุด พร้อมสถานะพิกัดและความขัดแย้ง
 - `data/source_registry.csv` — ทะเบียนแหล่งข้อมูลและข้อจำกัด
+- `data/source_routes.csv` — ลำดับแหล่งหลัก–สำรอง 20 เส้นทาง พร้อม lineage, freshness และ timeout
 - `data/support_station_shortlist.csv` — สถานี ThaiWater ใกล้อุทยานที่ตรวจ completeness เบื้องต้นแล้ว
 - `db/schema.sql` — โครงสร้างฐานข้อมูล SQLite/PostgreSQL-compatible foundation
 - `src/metrics.py` — การคำนวณ MAE, RMSE, Bias, WAPE, POD, FAR, CSI และ Brier Score
@@ -33,6 +34,9 @@
 - `src/fetch_grid_forecast.py` — ดึงฝน โอกาสฝน และอุณหภูมิ 7 วันของทุกเซลล์เป็น latest snapshot
 - `src/audit_park_boundary.py` — ตรวจเทียบ OSM กับชั้นอุทยาน GISTDA/MNRE ปี 2557 และบันทึกเหตุผลการเลือกขอบเขต
 - `src/audit_tmd_qpe.py` — ตรวจเวลาและ metadata ของ TMD QPE ASCII พร้อม freshness gate 6 ชั่วโมง
+- `src/source_portfolio.py` — อัปเดตทะเบียนหลายแหล่งในฐานข้อมูลเดิมโดยไม่ลบประวัติ
+- `src/fetch_gistda_disasters.py` — ดึงขอบเขตน้ำท่วม/จุดความร้อน GISTDA เมื่อมี API key
+- `src/fetch_usgs_earthquakes.py` — ดึงแผ่นดินไหวล่าสุดรอบประเทศไทยจาก USGS
 - `src/fetch_tmd_qpe.py` — อ่าน QPE 0.01° ที่ศูนย์กลางกริดและเขียน snapshot เฉพาะเมื่อผลิตภัณฑ์สด
 - `src/train_bias_corrections.py` — ฝึก offset/ratio แยกจุดและ lead bucket พร้อม gate 60 วัน/10 เหตุการณ์ฝน
 - `src/build_system_readiness.py` — คำนวณความพร้อมด้านเทคนิคและวุฒิภาวะของหลักฐานแยกกัน
