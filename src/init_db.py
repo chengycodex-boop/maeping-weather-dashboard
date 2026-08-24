@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = ROOT / "db" / "schema.sql"
 SOURCE_REGISTRY = ROOT / "data" / "source_registry.csv"
+SOURCE_ROUTES = ROOT / "data" / "source_routes.csv"
 STATIONS = ROOT / "data" / "stations.csv"
 SUPPORT_STATIONS = ROOT / "data" / "support_station_shortlist.csv"
 
@@ -44,6 +45,24 @@ def build_database(database_path: Path) -> None:
             )
             """,
             source_rows,
+        )
+
+        route_rows = _rows(SOURCE_ROUTES)
+        connection.executemany(
+            """
+            INSERT INTO source_routes (
+                route_id, source_id, domain, geographic_scope, priority_order,
+                fallback_group, independence_group, expected_freshness_minutes,
+                request_timeout_seconds, max_retries, credential_env, connector,
+                enabled, status, notes
+            ) VALUES (
+                :route_id, :source_id, :domain, :geographic_scope, :priority_order,
+                :fallback_group, :independence_group, :expected_freshness_minutes,
+                :request_timeout_seconds, :max_retries, :credential_env, :connector,
+                :enabled, :status, :notes
+            )
+            """,
+            route_rows,
         )
 
         station_rows = _rows(STATIONS)
@@ -180,7 +199,10 @@ def build_database(database_path: Path) -> None:
 
         counts = {
             table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            for table in ("sources", "locations", "location_aliases", "location_evidence", "data_quality_issues")
+            for table in (
+                "sources", "source_routes", "locations", "location_aliases",
+                "location_evidence", "data_quality_issues"
+            )
         }
         print(" ".join(f"{table}={count}" for table, count in counts.items()))
     finally:

@@ -34,6 +34,9 @@ WRITE_BATCH_SIZE = 250
 
 PRIMARY_KEYS: dict[str, tuple[str, ...]] = {
     "sources": ("source_id",),
+    "source_routes": ("route_id",),
+    "source_health_latest": ("route_id",),
+    "hazard_features_latest": ("source_id", "feature_id"),
     "locations": ("location_id",),
     "grid_cells": ("grid_id",),
     "observations": ("observation_id",),
@@ -55,6 +58,9 @@ PRIMARY_KEYS: dict[str, tuple[str, ...]] = {
 
 PUSH_TABLES = (
     "sources",
+    "source_routes",
+    "source_health_latest",
+    "hazard_features_latest",
     "locations",
     "grid_cells",
     "observations",
@@ -229,6 +235,8 @@ def pull_history(database: Path, client: SupabaseRestClient, now: datetime | Non
     requests = {
         "observations": {"observed_at": f"gte.{observation_since}"},
         "forecasts": {"issued_at": f"gte.{forecast_since}"},
+        "source_health_latest": {},
+        "hazard_features_latest": {},
         "verification_results": {},
         "calibration_models_latest": {},
     }
