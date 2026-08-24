@@ -27,6 +27,7 @@ jobs:
     env:
       SUPABASE_URL: https://qmfezkfzflanpckeyhtc.supabase.co
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      GISTDA_API_KEY: ${{ secrets.GISTDA_API_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
