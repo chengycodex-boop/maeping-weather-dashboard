@@ -19,6 +19,70 @@ CREATE TABLE IF NOT EXISTS sources (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS source_routes (
+    route_id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES sources(source_id),
+    domain TEXT NOT NULL,
+    geographic_scope TEXT NOT NULL,
+    priority_order INTEGER NOT NULL CHECK (priority_order >= 1),
+    fallback_group TEXT NOT NULL,
+    independence_group TEXT NOT NULL,
+    expected_freshness_minutes INTEGER NOT NULL CHECK (expected_freshness_minutes > 0),
+    request_timeout_seconds INTEGER NOT NULL CHECK (request_timeout_seconds BETWEEN 10 AND 600),
+    max_retries INTEGER NOT NULL CHECK (max_retries BETWEEN 0 AND 5),
+    credential_env TEXT,
+    connector TEXT,
+    enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+    status TEXT NOT NULL CHECK (
+        status IN ('active', 'candidate', 'credential_required', 'blocked')
+    ),
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS source_health_latest (
+    route_id TEXT PRIMARY KEY REFERENCES source_routes(route_id),
+    source_id TEXT NOT NULL REFERENCES sources(source_id),
+    cycle_id TEXT NOT NULL,
+    checked_at TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (
+        status IN (
+            'success', 'stale', 'failed', 'credentials_missing',
+            'no_data', 'budget_exhausted', 'not_run'
+        )
+    ),
+    duration_seconds REAL NOT NULL CHECK (duration_seconds >= 0),
+    records_received INTEGER CHECK (records_received >= 0),
+    newest_source_time TEXT,
+    freshness_lag_minutes REAL CHECK (freshness_lag_minutes IS NULL OR freshness_lag_minutes >= 0),
+    error_code TEXT,
+    message TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hazard_features_latest (
+    source_id TEXT NOT NULL REFERENCES sources(source_id),
+    feature_id TEXT NOT NULL,
+    hazard_type TEXT NOT NULL CHECK (
+        hazard_type IN ('flood', 'wildfire', 'drought', 'earthquake', 'landslide', 'air_quality')
+    ),
+    observed_at TEXT,
+    latitude REAL,
+    longitude REAL,
+    geometry_type TEXT NOT NULL,
+    geometry_json TEXT NOT NULL,
+    value REAL,
+    unit TEXT,
+    severity TEXT,
+    title TEXT,
+    source_url TEXT,
+    properties_json TEXT NOT NULL,
+    quality_flag TEXT NOT NULL CHECK (quality_flag IN ('provisional', 'validated', 'suspect')),
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (source_id, feature_id),
+    CHECK (latitude IS NULL OR latitude BETWEEN -90 AND 90),
+    CHECK (longitude IS NULL OR longitude BETWEEN -180 AND 180)
+);
+
 CREATE TABLE IF NOT EXISTS locations (
     location_id TEXT PRIMARY KEY,
     code TEXT NOT NULL UNIQUE,
@@ -270,6 +334,21 @@ CREATE INDEX IF NOT EXISTS idx_site_estimates_latest_time
 
 CREATE INDEX IF NOT EXISTS idx_site_rainfall_24h_latest_time
     ON site_rainfall_24h_latest (window_end);
+
+CREATE INDEX IF NOT EXISTS idx_source_routes_fallback
+    ON source_routes (fallback_group, priority_order, enabled);
+
+CREATE INDEX IF NOT EXISTS idx_source_routes_source
+    ON source_routes (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_source_health_latest_status
+    ON source_health_latest (status, checked_at);
+
+CREATE INDEX IF NOT EXISTS idx_source_health_latest_source
+    ON source_health_latest (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_hazard_features_latest_lookup
+    ON hazard_features_latest (hazard_type, observed_at);
 
 CREATE INDEX IF NOT EXISTS idx_verification_results_lookup
     ON verification_results (location_id, variable, lead_bucket, computed_at);
