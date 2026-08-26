@@ -3,11 +3,22 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from src.build_site_estimates import build_estimates, build_rainfall_24h
+from src.build_site_estimates import (
+    build_estimates,
+    build_rainfall_24h,
+    build_rainfall_today,
+    rainfall_today_window_start,
+)
 from src.init_db import build_database
 
 
 class SiteEstimateTests(unittest.TestCase):
+    def test_rainfall_day_starts_at_previous_0700_before_reset(self) -> None:
+        start = rainfall_today_window_start(
+            datetime.fromisoformat("2026-08-24T06:00:00+07:00")
+        )
+        self.assertEqual(start.isoformat(), "2026-08-23T07:00:00+07:00")
+
     def test_site_estimates_cover_all_reporting_sites(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             self._assert_coverage(Path(directory) / "weather.db")
@@ -75,6 +86,9 @@ class SiteEstimateTests(unittest.TestCase):
         rainfall_24h = build_rainfall_24h(
             database, now=datetime.fromisoformat(valid) + timedelta(hours=1)
         )
+        rainfall_today = build_rainfall_today(
+            database, now=datetime.fromisoformat(valid) + timedelta(hours=1)
+        )
         self.assertEqual(len(rows), 26)
         self.assertEqual(len({row["location_id"] for row in rows}), 13)
         approximate = [row for row in rows if row["location_id"] in {"MP08", "MP12"}]
@@ -90,19 +104,35 @@ class SiteEstimateTests(unittest.TestCase):
             row for row in rainfall_24h if row["location_id"] in {"MP08", "MP12"}
         ]
         self.assertTrue(all(row["confidence_level"] == "low" for row in approximate_24h))
+        self.assertEqual(len(rainfall_today), 13)
+        self.assertTrue(all(row["period_minutes"] == 480 for row in rainfall_today))
+        self.assertTrue(all(row["coverage_hours"] == 8 for row in rainfall_today))
+        self.assertTrue(all(row["expected_hours"] == 8 for row in rainfall_today))
+        self.assertTrue(all(row["value"] == 8.0 for row in rainfall_today))
+        self.assertTrue(
+            all(row["window_start"] == "2026-08-23T07:00:00+07:00" for row in rainfall_today)
+        )
 
         stale = build_rainfall_24h(
             database, now=datetime.fromisoformat(valid) + timedelta(hours=7)
         )
+        stale_today = build_rainfall_today(
+            database, now=datetime.fromisoformat(valid) + timedelta(hours=7)
+        )
         self.assertEqual(stale, [])
+        self.assertEqual(stale_today, [])
         connection = sqlite3.connect(database)
         try:
             remaining = connection.execute(
                 "SELECT COUNT(*) FROM site_rainfall_24h_latest"
             ).fetchone()[0]
+            remaining_today = connection.execute(
+                "SELECT COUNT(*) FROM site_rainfall_today_latest"
+            ).fetchone()[0]
         finally:
             connection.close()
         self.assertEqual(remaining, 0)
+        self.assertEqual(remaining_today, 0)
 
 
 if __name__ == "__main__":
