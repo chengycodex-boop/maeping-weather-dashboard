@@ -192,6 +192,26 @@ def dashboard_data(database: Path) -> dict:
                     """
                 )
             ]
+        rainfall_today = []
+        if connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='site_rainfall_today_latest'"
+        ).fetchone():
+            rainfall_today = [
+                dict(row)
+                for row in connection.execute(
+                    """
+                    SELECT location_id, window_start, window_end, period_minutes,
+                           value, unit, estimate_type, spatial_basis,
+                           source_count, source_summary, coverage_hours,
+                           expected_hours, coverage_ratio, nearest_station_km,
+                           confidence_score, confidence_level, uncertainty_low,
+                           uncertainty_high, validation_status, method_version,
+                           updated_at
+                    FROM site_rainfall_today_latest
+                    ORDER BY location_id
+                    """
+                )
+            ]
         latest_hourly_rain = connection.execute(
             """
             SELECT observed_at FROM observations
@@ -219,6 +239,13 @@ def dashboard_data(database: Path) -> dict:
             "age_hours": None if rain_age_hours is None else round(rain_age_hours, 2),
             "max_age_hours": 6,
             "available_sites": len(rainfall_24h),
+        }
+        rainfall_today_status = {
+            "status": rain_status,
+            "latest_hourly_at": latest_hourly_at,
+            "age_hours": None if rain_age_hours is None else round(rain_age_hours, 2),
+            "max_age_hours": 6,
+            "available_sites": len(rainfall_today),
         }
         issues = {
             row["severity"]: row["count"]
@@ -280,6 +307,8 @@ def dashboard_data(database: Path) -> dict:
         "grid_forecasts": grid_forecasts,
         "grid_estimates": grid_estimates,
         "site_estimates": site_estimates,
+        "rainfall_today": rainfall_today,
+        "rainfall_today_status": rainfall_today_status,
         "rainfall_24h": rainfall_24h,
         "rainfall_24h_status": rainfall_24h_status,
         "issues": issues,
