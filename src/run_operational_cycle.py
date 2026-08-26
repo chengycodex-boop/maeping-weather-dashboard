@@ -151,6 +151,9 @@ def database_counts() -> dict[str, int]:
             "grid_estimates_latest": connection.execute(
                 "SELECT COUNT(*) FROM grid_estimates_latest"
             ).fetchone()[0],
+            "rainfall_today_sites": connection.execute(
+                "SELECT COUNT(*) FROM site_rainfall_today_latest"
+            ).fetchone()[0],
             "source_routes": connection.execute("SELECT COUNT(*) FROM source_routes").fetchone()[0],
             "enabled_source_routes": connection.execute(
                 "SELECT COUNT(*) FROM source_routes WHERE enabled=1"
