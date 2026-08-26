@@ -65,8 +65,9 @@ def inspect(database: Path, now: datetime | None = None) -> dict:
                 period_filter = "AND period_minutes = 60" if variable == "precipitation" else ""
                 latest = connection.execute(
                     f"""
-                    SELECT MAX(observed_at) FROM observations
+                    SELECT observed_at FROM observations
                     WHERE location_id = ? AND variable = ? {period_filter}
+                    ORDER BY julianday(observed_at) DESC LIMIT 1
                     """,
                     (station["location_id"], variable),
                 ).fetchone()[0]
@@ -111,9 +112,10 @@ def inspect(database: Path, now: datetime | None = None) -> dict:
         duplicate_keys = connection.execute(
             """
             SELECT COUNT(*) FROM (
-                SELECT source_id, location_id, variable, observed_at, period_minutes
+                SELECT source_id, location_id, variable,
+                       strftime('%s', observed_at) AS observed_epoch, period_minutes
                 FROM observations
-                GROUP BY source_id, location_id, variable, observed_at, period_minutes
+                GROUP BY source_id, location_id, variable, observed_epoch, period_minutes
                 HAVING COUNT(*) > 1
             )
             """

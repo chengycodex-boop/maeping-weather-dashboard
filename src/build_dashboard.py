@@ -54,6 +54,7 @@ def park_boundary() -> dict:
 
 
 def dashboard_data(database: Path) -> dict:
+    generated_at = datetime.now(timezone.utc).replace(microsecond=0)
     master = _csv_by(STATIONS, "station_id")
     support = _csv_by(SHORTLIST, "station_id")
     connection = sqlite3.connect(database)
@@ -191,6 +192,34 @@ def dashboard_data(database: Path) -> dict:
                     """
                 )
             ]
+        latest_hourly_rain = connection.execute(
+            """
+            SELECT observed_at FROM observations
+            WHERE variable='precipitation' AND period_minutes=60
+              AND quality_flag IN ('raw', 'provisional', 'validated')
+            ORDER BY julianday(observed_at) DESC LIMIT 1
+            """
+        ).fetchone()
+        latest_hourly_at = latest_hourly_rain[0] if latest_hourly_rain else None
+        if latest_hourly_at:
+            parsed_latest = datetime.fromisoformat(latest_hourly_at.replace("Z", "+00:00"))
+            if parsed_latest.tzinfo is None:
+                parsed_latest = parsed_latest.replace(tzinfo=timezone.utc)
+            rain_age_hours = max(
+                0.0,
+                (generated_at - parsed_latest.astimezone(timezone.utc)).total_seconds() / 3600,
+            )
+            rain_status = "fresh" if rain_age_hours <= 6 else "stale"
+        else:
+            rain_age_hours = None
+            rain_status = "no_data"
+        rainfall_24h_status = {
+            "status": rain_status,
+            "latest_hourly_at": latest_hourly_at,
+            "age_hours": None if rain_age_hours is None else round(rain_age_hours, 2),
+            "max_age_hours": 6,
+            "available_sites": len(rainfall_24h),
+        }
         issues = {
             row["severity"]: row["count"]
             for row in connection.execute(
@@ -241,7 +270,7 @@ def dashboard_data(database: Path) -> dict:
     if SYSTEM_READINESS.exists():
         system_readiness = json.loads(SYSTEM_READINESS.read_text(encoding="utf-8"))
     return {
-        "generated_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "generated_at": generated_at.isoformat(),
         "timezone_assumption": "Asia/Bangkok (+07:00), provisional",
         "boundary": park_boundary(),
         "locations": locations,
@@ -252,6 +281,7 @@ def dashboard_data(database: Path) -> dict:
         "grid_estimates": grid_estimates,
         "site_estimates": site_estimates,
         "rainfall_24h": rainfall_24h,
+        "rainfall_24h_status": rainfall_24h_status,
         "issues": issues,
         "verification": verification,
         "operational_status": operational_status,

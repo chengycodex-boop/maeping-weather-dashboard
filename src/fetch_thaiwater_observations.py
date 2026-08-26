@@ -55,10 +55,23 @@ def fetch_json(endpoint: str, parameters: dict[str, str] | None = None) -> dict:
 
 
 def parse_local_timestamp(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value)
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=BANGKOK)
     return parsed
+
+
+def canonical_utc_timestamp(value: str | datetime) -> str:
+    """Return one stable representation for timestamps crossing Supabase.
+
+    ThaiWater sends local ICT timestamps while Supabase serializes timestamptz
+    values in UTC.  Normalizing before hashing and writing keeps both paths at
+    the same logical grain.
+    """
+    parsed = parse_local_timestamp(value) if isinstance(value, str) else value
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=BANGKOK)
+    return parsed.astimezone(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def quality_flag(variable: str, value: float) -> str:
@@ -72,7 +85,8 @@ def quality_flag(variable: str, value: float) -> str:
 def observation_id(
     location_id: str, variable: str, observed_at: str, period_minutes: int
 ) -> str:
-    raw = "|".join((SOURCE_ID, location_id, variable, observed_at, str(period_minutes)))
+    canonical_time = canonical_utc_timestamp(observed_at)
+    raw = "|".join((SOURCE_ID, location_id, variable, canonical_time, str(period_minutes)))
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -89,7 +103,7 @@ def _rain_rows(station_id: str, start_date: str, end_date: str) -> list[dict]:
         rows.append(
             {
                 "variable": "precipitation",
-                "observed_at": parse_local_timestamp(item["rainfall_datetime"]).isoformat(),
+                "observed_at": canonical_utc_timestamp(item["rainfall_datetime"]),
                 "period_minutes": 1440,
                 "value": float(item["rainfall_value"]),
                 "unit": "mm",
@@ -101,7 +115,7 @@ def _rain_rows(station_id: str, start_date: str, end_date: str) -> list[dict]:
         rows.append(
             {
                 "variable": "precipitation",
-                "observed_at": parse_local_timestamp(item["rainfall_datetime"]).isoformat(),
+                "observed_at": canonical_utc_timestamp(item["rainfall_datetime"]),
                 "period_minutes": 60,
                 "value": float(item["rainfall_value"]),
                 "unit": "mm",
@@ -121,7 +135,7 @@ def _temperature_rows(
     return [
         {
             "variable": "temperature",
-            "observed_at": parse_local_timestamp(item["datetime"]).isoformat(),
+            "observed_at": canonical_utc_timestamp(item["datetime"]),
             "period_minutes": period_minutes,
             "value": float(item["value"]),
             "unit": "°C",
@@ -158,20 +172,74 @@ def ingest(database: Path, station: dict[str, str], rows: list[dict], ingested_a
             raise RuntimeError(f"location {location_id} is missing; rebuild the database")
         for row in rows:
             flag = quality_flag(row["variable"], row["value"])
+            observed_at = canonical_utc_timestamp(row["observed_at"])
             oid = observation_id(
-                location_id, row["variable"], row["observed_at"], row["period_minutes"]
+                location_id, row["variable"], observed_at, row["period_minutes"]
             )
+            equivalent = connection.execute(
+                """
+                SELECT observation_id
+                FROM observations
+                WHERE source_id=? AND location_id=? AND variable=? AND period_minutes=?
+                  AND ABS(julianday(observed_at)-julianday(?)) < 0.0000001
+                ORDER BY ingested_at DESC, observation_id
+                """,
+                (
+                    SOURCE_ID,
+                    location_id,
+                    row["variable"],
+                    row["period_minutes"],
+                    observed_at,
+                ),
+            ).fetchall()
+            if equivalent:
+                equivalent_ids = [item[0] for item in equivalent]
+                survivor = oid if oid in equivalent_ids else equivalent_ids[0]
+                for duplicate_id in equivalent_ids:
+                    if duplicate_id != survivor:
+                        connection.execute(
+                            "DELETE FROM observations WHERE observation_id=?",
+                            (duplicate_id,),
+                        )
+                connection.execute(
+                    """
+                    UPDATE observations SET
+                        source_id=?, location_id=?, variable=?, observed_at=?,
+                        period_minutes=?, value=?, unit=?, quality_flag=?,
+                        spatial_support='point', ingested_at=?
+                    WHERE observation_id=?
+                    """,
+                    (
+                        SOURCE_ID,
+                        location_id,
+                        row["variable"],
+                        observed_at,
+                        row["period_minutes"],
+                        row["value"],
+                        row["unit"],
+                        flag,
+                        ingested_at,
+                        survivor,
+                    ),
+                )
+                continue
             connection.execute(
                 """
                 INSERT INTO observations (
                     observation_id, source_id, location_id, variable, observed_at,
                     period_minutes, value, unit, quality_flag, spatial_support, ingested_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'point', ?)
-                ON CONFLICT(source_id, location_id, variable, observed_at, period_minutes)
+                ON CONFLICT
                 DO UPDATE SET
+                    source_id = excluded.source_id,
+                    location_id = excluded.location_id,
+                    variable = excluded.variable,
+                    observed_at = excluded.observed_at,
+                    period_minutes = excluded.period_minutes,
                     value = excluded.value,
                     unit = excluded.unit,
                     quality_flag = excluded.quality_flag,
+                    spatial_support = excluded.spatial_support,
                     ingested_at = excluded.ingested_at
                 """,
                 (
@@ -179,7 +247,7 @@ def ingest(database: Path, station: dict[str, str], rows: list[dict], ingested_a
                     SOURCE_ID,
                     location_id,
                     row["variable"],
-                    row["observed_at"],
+                    observed_at,
                     row["period_minutes"],
                     row["value"],
                     row["unit"],

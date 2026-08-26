@@ -27,6 +27,7 @@ except ModuleNotFoundError:
 
 METHOD_VERSION = "maeping_blend_v1"
 RAINFALL_24H_METHOD_VERSION = "maeping_rain24_idw_v1"
+RAINFALL_24H_MAX_AGE_HOURS = 6
 VARIABLES = {
     "precipitation": {"unit": "mm", "period_minutes": 180, "floor": 0.5},
     "temperature": {"unit": "°C", "period_minutes": 60, "floor": 1.5},
@@ -284,15 +285,27 @@ def confidence(site: dict, components: list[Component], nearest_km: float | None
     return round(score, 1)
 
 
-def rainfall_24h_reference_time(connection: sqlite3.Connection) -> datetime | None:
+def rainfall_24h_reference_time(
+    connection: sqlite3.Connection,
+    now: datetime | None = None,
+    max_age_hours: float = RAINFALL_24H_MAX_AGE_HOURS,
+) -> datetime | None:
     row = connection.execute(
         """
-        SELECT MAX(observed_at) FROM observations
+        SELECT observed_at FROM observations
         WHERE variable='precipitation' AND period_minutes=60
           AND quality_flag IN ('raw', 'provisional', 'validated')
+        ORDER BY julianday(observed_at) DESC LIMIT 1
         """
     ).fetchone()
-    return parse_time(row[0]) if row and row[0] else None
+    if not row or not row[0]:
+        return None
+    latest = parse_time(row[0])
+    reference_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    age = reference_now - latest.astimezone(timezone.utc)
+    if age > timedelta(hours=max_age_hours) or age < timedelta(hours=-1):
+        return None
+    return latest
 
 
 def rainfall_24h_sensor_values(
@@ -379,13 +392,13 @@ def rainfall_24h_confidence(site: dict, nearest_km: float | None, coverage_ratio
     return round(score, 1)
 
 
-def build_rainfall_24h(database: Path) -> list[dict]:
+def build_rainfall_24h(database: Path, now: datetime | None = None) -> list[dict]:
     """Build rolling 24-hour rainfall estimates from hourly gauge observations."""
     connection = sqlite3.connect(database)
     connection.row_factory = sqlite3.Row
     try:
         ensure_schema(connection)
-        at = rainfall_24h_reference_time(connection)
+        at = rainfall_24h_reference_time(connection, now=now)
         if at is None:
             connection.execute("DELETE FROM site_rainfall_24h_latest")
             connection.commit()
