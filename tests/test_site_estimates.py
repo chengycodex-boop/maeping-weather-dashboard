@@ -72,7 +72,9 @@ class SiteEstimateTests(unittest.TestCase):
             connection.close()
 
         rows = build_estimates(database)
-        rainfall_24h = build_rainfall_24h(database)
+        rainfall_24h = build_rainfall_24h(
+            database, now=datetime.fromisoformat(valid) + timedelta(hours=1)
+        )
         self.assertEqual(len(rows), 26)
         self.assertEqual(len({row["location_id"] for row in rows}), 13)
         approximate = [row for row in rows if row["location_id"] in {"MP08", "MP12"}]
@@ -88,6 +90,19 @@ class SiteEstimateTests(unittest.TestCase):
             row for row in rainfall_24h if row["location_id"] in {"MP08", "MP12"}
         ]
         self.assertTrue(all(row["confidence_level"] == "low" for row in approximate_24h))
+
+        stale = build_rainfall_24h(
+            database, now=datetime.fromisoformat(valid) + timedelta(hours=7)
+        )
+        self.assertEqual(stale, [])
+        connection = sqlite3.connect(database)
+        try:
+            remaining = connection.execute(
+                "SELECT COUNT(*) FROM site_rainfall_24h_latest"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertEqual(remaining, 0)
 
 
 if __name__ == "__main__":
