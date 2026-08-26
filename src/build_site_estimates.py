@@ -27,7 +27,9 @@ except ModuleNotFoundError:
 
 METHOD_VERSION = "maeping_blend_v1"
 RAINFALL_24H_METHOD_VERSION = "maeping_rain24_idw_v1"
+RAINFALL_TODAY_METHOD_VERSION = "maeping_rain07_idw_v1"
 RAINFALL_24H_MAX_AGE_HOURS = 6
+BANGKOK_TIMEZONE = timezone(timedelta(hours=7))
 VARIABLES = {
     "precipitation": {"unit": "mm", "period_minutes": 180, "floor": 0.5},
     "temperature": {"unit": "°C", "period_minutes": 60, "floor": 1.5},
@@ -121,6 +123,38 @@ def ensure_schema(connection: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_site_rainfall_24h_latest_time
             ON site_rainfall_24h_latest (window_end);
+
+        CREATE TABLE IF NOT EXISTS site_rainfall_today_latest (
+            location_id TEXT PRIMARY KEY REFERENCES locations(location_id),
+            window_start TEXT NOT NULL,
+            window_end TEXT NOT NULL,
+            period_minutes INTEGER NOT NULL CHECK (period_minutes BETWEEN 1 AND 1440),
+            value REAL NOT NULL CHECK (value >= 0),
+            unit TEXT NOT NULL CHECK (unit = 'mm'),
+            estimate_type TEXT NOT NULL CHECK (
+                estimate_type IN ('sensor', 'spatial_interpolation', 'regional_fallback')
+            ),
+            spatial_basis TEXT NOT NULL CHECK (
+                spatial_basis IN ('exact_point', 'area_anchor', 'park_regional')
+            ),
+            source_count INTEGER NOT NULL CHECK (source_count >= 1),
+            source_summary TEXT NOT NULL,
+            coverage_hours REAL NOT NULL CHECK (coverage_hours BETWEEN 0 AND 24),
+            expected_hours REAL NOT NULL CHECK (expected_hours BETWEEN 0 AND 24),
+            coverage_ratio REAL NOT NULL CHECK (coverage_ratio BETWEEN 0 AND 1),
+            nearest_station_km REAL,
+            confidence_score REAL NOT NULL CHECK (confidence_score BETWEEN 0 AND 100),
+            confidence_level TEXT NOT NULL CHECK (confidence_level IN ('high', 'medium', 'low')),
+            uncertainty_low REAL NOT NULL CHECK (uncertainty_low >= 0),
+            uncertainty_high REAL NOT NULL CHECK (uncertainty_high >= uncertainty_low),
+            validation_status TEXT NOT NULL CHECK (
+                validation_status IN ('awaiting_validation', 'provisional', 'validated')
+            ),
+            method_version TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_site_rainfall_today_latest_time
+            ON site_rainfall_today_latest (window_end);
         """
     )
 
@@ -392,6 +426,177 @@ def rainfall_24h_confidence(site: dict, nearest_km: float | None, coverage_ratio
     return round(score, 1)
 
 
+def rainfall_today_window_start(at: datetime) -> datetime:
+    """Return the 07:00 Asia/Bangkok start of the active rainfall day."""
+    local_at = at.astimezone(BANGKOK_TIMEZONE)
+    start = local_at.replace(hour=7, minute=0, second=0, microsecond=0)
+    if local_at < start:
+        start -= timedelta(days=1)
+    return start
+
+
+def rainfall_today_sensor_values(
+    connection: sqlite3.Connection,
+    at: datetime,
+    start: datetime,
+    minimum_coverage_ratio: float = 0.75,
+) -> tuple[list[dict], float]:
+    """Return gauge totals since 07:00 for sufficiently complete hourly series."""
+    connection.row_factory = sqlite3.Row
+    expected_hours = min(24.0, max(0.0, (at - start).total_seconds() / 3600))
+    if expected_hours < 1:
+        return [], expected_hours
+    minimum_hours = max(1, math.ceil(expected_hours * minimum_coverage_ratio))
+    output: list[dict] = []
+    for location in connection.execute(
+        """
+        SELECT location_id, latitude, longitude
+        FROM locations
+        WHERE location_id LIKE 'THAIWATER_%'
+          AND latitude IS NOT NULL AND longitude IS NOT NULL
+        """
+    ):
+        values = connection.execute(
+            """
+            SELECT observed_at, MAX(value) AS value FROM observations
+            WHERE location_id=? AND variable='precipitation' AND period_minutes=60
+              AND quality_flag IN ('raw', 'provisional', 'validated')
+              AND julianday(observed_at)>julianday(?)
+              AND julianday(observed_at)<=julianday(?)
+            GROUP BY observed_at
+            ORDER BY observed_at
+            """,
+            (location["location_id"], start.isoformat(), at.isoformat()),
+        ).fetchall()
+        coverage_hours = min(expected_hours, float(len(values)))
+        if coverage_hours < minimum_hours:
+            continue
+        latest = max(parse_time(row["observed_at"]) for row in values)
+        if latest < at - timedelta(hours=3):
+            continue
+        output.append(
+            {
+                "location_id": location["location_id"],
+                "latitude": location["latitude"],
+                "longitude": location["longitude"],
+                "value": sum(max(0.0, float(row["value"])) for row in values),
+                "coverage_hours": coverage_hours,
+            }
+        )
+    return output, expected_hours
+
+
+def build_rainfall_today(database: Path, now: datetime | None = None) -> list[dict]:
+    """Build rainfall accumulated since 07:00 Asia/Bangkok from hourly gauges."""
+    connection = sqlite3.connect(database)
+    connection.row_factory = sqlite3.Row
+    try:
+        ensure_schema(connection)
+        at = rainfall_24h_reference_time(connection, now=now)
+        if at is None:
+            connection.execute("DELETE FROM site_rainfall_today_latest")
+            connection.commit()
+            return []
+        start = rainfall_today_window_start(at)
+        sensors, expected_hours = rainfall_today_sensor_values(connection, at, start)
+        if not sensors:
+            connection.execute("DELETE FROM site_rainfall_today_latest")
+            connection.commit()
+            return []
+        sites = reporting_sites(connection)
+        regional_value = median(sensor["value"] for sensor in sensors)
+        regional_coverage = median(sensor["coverage_hours"] for sensor in sensors)
+        updated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+        output: list[dict] = []
+        for site in sites:
+            value, nearest_km, source_count, coverage_hours, source_values = interpolated_rainfall_24h(
+                sensors, site
+            )
+            located = site["latitude"] is not None and site["longitude"] is not None
+            if value is None:
+                value = float(regional_value)
+                coverage_hours = float(regional_coverage)
+                source_count = len(sensors)
+                source_values = [float(sensor["value"]) for sensor in sensors]
+            coverage_ratio = min(1.0, coverage_hours / expected_hours)
+            score = rainfall_24h_confidence(site, nearest_km, coverage_ratio)
+            if not located:
+                score = min(score, 42.0)
+            level = "high" if score >= 75 else "medium" if score >= 55 else "low"
+            spread = max(source_values) - min(source_values) if source_values else 0.0
+            uncertainty = max(0.5, value * 0.35, spread * 0.75)
+            if site["coordinate_role"] == "area_anchor":
+                uncertainty = max(uncertainty, 1.5)
+            if site.get("confidence") == "low" or not located:
+                uncertainty = max(uncertainty, 2.0, value * 0.6)
+            estimate_type = (
+                "regional_fallback"
+                if not located
+                else "sensor"
+                if site["coordinate_role"] == "exact_station" and nearest_km is not None and nearest_km <= 1
+                else "spatial_interpolation"
+            )
+            spatial_basis = (
+                "park_regional"
+                if not located
+                else "exact_point"
+                if site["coordinate_role"] == "exact_station"
+                else "area_anchor"
+            )
+            output.append(
+                {
+                    "location_id": site["location_id"],
+                    "window_start": start.isoformat(),
+                    "window_end": at.isoformat(),
+                    "period_minutes": max(1, round(expected_hours * 60)),
+                    "value": round(max(0.0, value), 3),
+                    "unit": "mm",
+                    "estimate_type": estimate_type,
+                    "spatial_basis": spatial_basis,
+                    "source_count": source_count,
+                    "source_summary": (
+                        f"ฝนรายชั่วโมง ThaiWater {source_count} สถานี · "
+                        f"รอบตั้งแต่ 07:00 น. · ครอบคลุมเฉลี่ย "
+                        f"{coverage_hours:.1f}/{expected_hours:.1f} ชม."
+                    ),
+                    "coverage_hours": round(coverage_hours, 2),
+                    "expected_hours": round(expected_hours, 2),
+                    "coverage_ratio": round(coverage_ratio, 4),
+                    "nearest_station_km": None if nearest_km is None else round(nearest_km, 3),
+                    "confidence_score": score,
+                    "confidence_level": level,
+                    "uncertainty_low": round(max(0.0, value - uncertainty), 3),
+                    "uncertainty_high": round(value + uncertainty, 3),
+                    "validation_status": "awaiting_validation",
+                    "method_version": RAINFALL_TODAY_METHOD_VERSION,
+                    "updated_at": updated_at,
+                }
+            )
+        connection.execute("DELETE FROM site_rainfall_today_latest")
+        connection.executemany(
+            """
+            INSERT INTO site_rainfall_today_latest (
+                location_id, window_start, window_end, period_minutes, value, unit,
+                estimate_type, spatial_basis, source_count, source_summary,
+                coverage_hours, expected_hours, coverage_ratio, nearest_station_km,
+                confidence_score, confidence_level, uncertainty_low,
+                uncertainty_high, validation_status, method_version, updated_at
+            ) VALUES (
+                :location_id, :window_start, :window_end, :period_minutes, :value, :unit,
+                :estimate_type, :spatial_basis, :source_count, :source_summary,
+                :coverage_hours, :expected_hours, :coverage_ratio, :nearest_station_km,
+                :confidence_score, :confidence_level, :uncertainty_low,
+                :uncertainty_high, :validation_status, :method_version, :updated_at
+            )
+            """,
+            output,
+        )
+        connection.commit()
+        return output
+    finally:
+        connection.close()
+
+
 def build_rainfall_24h(database: Path, now: datetime | None = None) -> list[dict]:
     """Build rolling 24-hour rainfall estimates from hourly gauge observations."""
     connection = sqlite3.connect(database)
@@ -617,11 +822,13 @@ def main() -> int:
     args = parser.parse_args()
     rows = build_estimates(args.database)
     rainfall_24h_rows = build_rainfall_24h(args.database)
+    rainfall_today_rows = build_rainfall_today(args.database)
     reporting_sites_count = len({row["location_id"] for row in rows})
     low_confidence = sum(row["confidence_level"] == "low" for row in rows)
     print(
         f"site_estimates={len(rows)} reporting_sites={reporting_sites_count} "
         f"low_confidence_rows={low_confidence} rainfall_24h={len(rainfall_24h_rows)} "
+        f"rainfall_today={len(rainfall_today_rows)} "
         f"method={METHOD_VERSION}"
     )
     return 0
