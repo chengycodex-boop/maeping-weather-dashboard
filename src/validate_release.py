@@ -37,6 +37,12 @@ def validate(
         rainfall_24h_end = connection.execute(
             "SELECT MAX(window_end) FROM site_rainfall_24h_latest"
         ).fetchone()[0]
+        rainfall_today_rows = connection.execute(
+            "SELECT COUNT(*) FROM site_rainfall_today_latest"
+        ).fetchone()[0]
+        rainfall_today_window = connection.execute(
+            "SELECT MIN(window_start), MAX(window_end) FROM site_rainfall_today_latest"
+        ).fetchone()
         latest_hourly_rain = connection.execute(
             """SELECT observed_at FROM observations
                WHERE variable='precipitation' AND period_minutes=60
@@ -52,6 +58,9 @@ def validate(
         "variables": variables,
         "rainfall_24h_rows": rainfall_24h_rows,
         "rainfall_24h_end": rainfall_24h_end,
+        "rainfall_today_rows": rainfall_today_rows,
+        "rainfall_today_start": rainfall_today_window[0],
+        "rainfall_today_end": rainfall_today_window[1],
         "dashboard_bytes": dashboard.stat().st_size,
     }
     if reporting_sites != 13:
@@ -80,6 +89,21 @@ def validate(
             window_end = window_end.replace(tzinfo=timezone.utc)
         if reference_now - window_end.astimezone(timezone.utc) > timedelta(hours=6):
             raise RuntimeError(f"stale 24-hour rainfall estimates must not be published: {checks}")
+    if rainfall_today_rows not in (0, reporting_sites):
+        raise RuntimeError(f"incomplete rainfall-since-07 estimates: {checks}")
+    if rainfall_today_rows == reporting_sites and rainfall_today_window[0]:
+        window_start = datetime.fromisoformat(rainfall_today_window[0].replace("Z", "+00:00"))
+        window_end = datetime.fromisoformat(rainfall_today_window[1].replace("Z", "+00:00"))
+        if window_start.tzinfo is None:
+            window_start = window_start.replace(tzinfo=timezone.utc)
+        if window_end.tzinfo is None:
+            window_end = window_end.replace(tzinfo=timezone.utc)
+        bangkok = timezone(timedelta(hours=7))
+        local_start = window_start.astimezone(bangkok)
+        if (local_start.hour, local_start.minute) != (7, 0):
+            raise RuntimeError(f"rainfall day must start at 07:00 Asia/Bangkok: {checks}")
+        if reference_now - window_end.astimezone(timezone.utc) > timedelta(hours=6):
+            raise RuntimeError(f"stale rainfall-since-07 estimates must not be published: {checks}")
     required_text = (
         "ข้อมูลล่าสุด",
         "สร้างหน้าเว็บ",
@@ -87,6 +111,11 @@ def validate(
         "ฝนและอุณหภูมิรายพื้นที่",
         "ฝนสูงสุด 24 ชั่วโมง",
         "ข้อมูลฝนล่าช้า",
+        "พยากรณ์ 7 วัน",
+        "โอกาสฝน 6 ชั่วโมงหน้า",
+        "ฝนสะสมวันนี้ (ตั้งแต่ 07:00 น.)",
+        "rainTodayWindowText",
+        "rain24WindowText",
     )
     missing = [text for text in required_text if text not in html]
     if missing or dashboard.stat().st_size < 100_000:
